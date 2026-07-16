@@ -9,7 +9,7 @@ router.get('/customers/:customerId/accounts', async (req, res, next) => {
   try {
     const { customerId } = req.params;
     const [rows] = await pool.query(
-      'SELECT * FROM accounts WHERE customer_id = ? ORDER BY id DESC',
+      'SELECT * FROM accounts WHERE customer_id = ? AND deleted_at IS NULL ORDER BY id DESC',
       [customerId]
     );
     res.json(rows);
@@ -25,6 +25,7 @@ router.get('/', async (req, res, next) => {
       `SELECT a.*, c.customer_no, c.first_name, c.last_name
        FROM accounts a
        JOIN customers c ON a.customer_id = c.id
+       WHERE a.deleted_at IS NULL AND c.deleted_at IS NULL
        ORDER BY a.id DESC`
     );
     res.json(rows);
@@ -37,7 +38,7 @@ router.get('/', async (req, res, next) => {
 router.get('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const [rows] = await pool.query('SELECT * FROM accounts WHERE id = ?', [id]);
+    const [rows] = await pool.query('SELECT * FROM accounts WHERE id = ? AND deleted_at IS NULL', [id]);
 
     if (rows.length === 0) {
       throw createError(404, 'Hesap bulunamadı.');
@@ -54,8 +55,8 @@ router.post('/customers/:customerId/accounts', async (req, res, next) => {
   try {
     const { customerId } = req.params;
 
-    // Check customer exists
-    const [custCheck] = await pool.query('SELECT id FROM customers WHERE id = ?', [customerId]);
+    // Check customer exists and not deleted
+    const [custCheck] = await pool.query('SELECT id FROM customers WHERE id = ? AND deleted_at IS NULL', [customerId]);
     if (custCheck.length === 0) {
       throw createError(404, 'Müşteri bulunamadı.');
     }
@@ -90,7 +91,7 @@ router.post('/customers/:customerId/accounts', async (req, res, next) => {
 router.put('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const [existing] = await pool.query('SELECT * FROM accounts WHERE id = ?', [id]);
+    const [existing] = await pool.query('SELECT * FROM accounts WHERE id = ? AND deleted_at IS NULL', [id]);
     if (existing.length === 0) {
       throw createError(404, 'Hesap bulunamadı.');
     }
@@ -122,18 +123,18 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// DELETE /api/accounts/:id - Delete account
+// DELETE /api/accounts/:id - Soft delete account
 router.delete('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // SELECT before DELETE (MySQL doesn't support RETURNING)
-    const [rows] = await pool.query('SELECT * FROM accounts WHERE id = ?', [id]);
+    // SELECT before soft-delete (only non-deleted records)
+    const [rows] = await pool.query('SELECT * FROM accounts WHERE id = ? AND deleted_at IS NULL', [id]);
     if (rows.length === 0) {
       throw createError(404, 'Hesap bulunamadı.');
     }
 
-    await pool.query('DELETE FROM accounts WHERE id = ?', [id]);
+    await pool.query('UPDATE accounts SET deleted_at = NOW() WHERE id = ?', [id]);
 
     res.json({ message: 'Hesap başarıyla silindi.', account: rows[0] });
   } catch (err) {

@@ -20,6 +20,8 @@ router.get('/', async (req, res, next) => {
     `;
     const params = [];
 
+    query += ' AND c.deleted_at IS NULL';
+
     if (type) {
       params.push(type);
       query += ` AND c.customer_type = ?`;
@@ -53,7 +55,7 @@ router.get('/:id', async (req, res, next) => {
       FROM customers c
       LEFT JOIN individual_customers ic ON c.id = ic.customer_id
       LEFT JOIN corporate_customers cc ON c.id = cc.customer_id
-      WHERE c.id = ?`,
+      WHERE c.id = ? AND c.deleted_at IS NULL`,
       [id]
     );
 
@@ -145,7 +147,7 @@ router.put('/:id', async (req, res, next) => {
     const { id } = req.params;
 
     // Check if customer exists
-    const [existing] = await conn.query('SELECT * FROM customers WHERE id = ?', [id]);
+    const [existing] = await conn.query('SELECT * FROM customers WHERE id = ? AND deleted_at IS NULL', [id]);
     if (existing.length === 0) {
       throw createError(404, 'Müşteri bulunamadı.');
     }
@@ -218,18 +220,18 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// DELETE /api/customers/:id - Delete customer
+// DELETE /api/customers/:id - Soft delete customer
 router.delete('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // SELECT before DELETE (MySQL doesn't support RETURNING)
-    const [rows] = await pool.query('SELECT * FROM customers WHERE id = ?', [id]);
+    // SELECT before soft-delete (only non-deleted records)
+    const [rows] = await pool.query('SELECT * FROM customers WHERE id = ? AND deleted_at IS NULL', [id]);
     if (rows.length === 0) {
       throw createError(404, 'Müşteri bulunamadı.');
     }
 
-    await pool.query('DELETE FROM customers WHERE id = ?', [id]);
+    await pool.query('UPDATE customers SET deleted_at = NOW() WHERE id = ?', [id]);
 
     res.json({ message: 'Müşteri başarıyla silindi.', customer: rows[0] });
   } catch (err) {

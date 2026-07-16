@@ -55,3 +55,4 @@ Desktop.ini
 *.tmp
 *.temp
 .cache/
+*.md

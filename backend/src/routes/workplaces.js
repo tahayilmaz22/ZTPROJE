@@ -9,7 +9,7 @@ router.get('/customers/:customerId/workplaces', async (req, res, next) => {
   try {
     const { customerId } = req.params;
     const [rows] = await pool.query(
-      'SELECT * FROM workplaces WHERE customer_id = ? ORDER BY id DESC',
+      'SELECT * FROM workplaces WHERE customer_id = ? AND deleted_at IS NULL ORDER BY id DESC',
       [customerId]
     );
     res.json(rows);
@@ -25,6 +25,7 @@ router.get('/', async (req, res, next) => {
       `SELECT w.*, c.customer_no, c.first_name, c.last_name
        FROM workplaces w
        JOIN customers c ON w.customer_id = c.id
+       WHERE w.deleted_at IS NULL AND c.deleted_at IS NULL
        ORDER BY w.id DESC`
     );
     res.json(rows);
@@ -41,7 +42,7 @@ router.get('/:id', async (req, res, next) => {
       `SELECT w.*, c.customer_no, c.first_name, c.last_name
        FROM workplaces w
        JOIN customers c ON w.customer_id = c.id
-       WHERE w.id = ?`,
+       WHERE w.id = ? AND w.deleted_at IS NULL`,
       [id]
     );
 
@@ -61,7 +62,7 @@ router.post('/customers/:customerId/workplaces', async (req, res, next) => {
   try {
     const { customerId } = req.params;
 
-    const [custCheck] = await conn.query('SELECT id FROM customers WHERE id = ?', [customerId]);
+    const [custCheck] = await conn.query('SELECT id FROM customers WHERE id = ? AND deleted_at IS NULL', [customerId]);
     if (custCheck.length === 0) {
       throw createError(404, 'Müşteri bulunamadı.');
     }
@@ -117,7 +118,7 @@ router.put('/:id', async (req, res, next) => {
   const conn = await pool.getConnection();
   try {
     const { id } = req.params;
-    const [existing] = await conn.query('SELECT * FROM workplaces WHERE id = ?', [id]);
+    const [existing] = await conn.query('SELECT * FROM workplaces WHERE id = ? AND deleted_at IS NULL', [id]);
     if (existing.length === 0) {
       throw createError(404, 'İşyeri bulunamadı.');
     }
@@ -166,18 +167,18 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// DELETE /api/workplaces/:id - Delete workplace
+// DELETE /api/workplaces/:id - Soft delete workplace
 router.delete('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // SELECT before DELETE (MySQL doesn't support RETURNING)
-    const [rows] = await pool.query('SELECT * FROM workplaces WHERE id = ?', [id]);
+    // SELECT before soft-delete (only non-deleted records)
+    const [rows] = await pool.query('SELECT * FROM workplaces WHERE id = ? AND deleted_at IS NULL', [id]);
     if (rows.length === 0) {
       throw createError(404, 'İşyeri bulunamadı.');
     }
 
-    await pool.query('DELETE FROM workplaces WHERE id = ?', [id]);
+    await pool.query('UPDATE workplaces SET deleted_at = NOW() WHERE id = ?', [id]);
 
     res.json({ message: 'İşyeri başarıyla silindi.', workplace: rows[0] });
   } catch (err) {

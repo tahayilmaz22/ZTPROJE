@@ -15,6 +15,7 @@ router.get('/customers', async (req, res, next) => {
        FROM customers c
        LEFT JOIN individual_customers ic ON c.id = ic.customer_id
        LEFT JOIN corporate_customers cc ON c.id = cc.customer_id
+       WHERE c.deleted_at IS NULL
        ORDER BY c.id`
     );
 
@@ -76,6 +77,7 @@ router.get('/terminals', async (req, res, next) => {
        FROM terminals t
        JOIN workplaces w ON t.workplace_id = w.id
        JOIN customers c ON w.customer_id = c.id
+       WHERE t.deleted_at IS NULL AND w.deleted_at IS NULL AND c.deleted_at IS NULL
        ORDER BY t.id`
     );
 

@@ -12,7 +12,7 @@ router.get('/workplaces/:workplaceId/terminals', async (req, res, next) => {
       `SELECT t.*, w.name AS workplace_name, w.workplace_no
        FROM terminals t
        JOIN workplaces w ON t.workplace_id = w.id
-       WHERE t.workplace_id = ?
+       WHERE t.workplace_id = ? AND t.deleted_at IS NULL
        ORDER BY t.id DESC`,
       [workplaceId]
     );
@@ -31,6 +31,7 @@ router.get('/', async (req, res, next) => {
        FROM terminals t
        JOIN workplaces w ON t.workplace_id = w.id
        JOIN customers c ON w.customer_id = c.id
+       WHERE t.deleted_at IS NULL AND w.deleted_at IS NULL AND c.deleted_at IS NULL
        ORDER BY t.id DESC`
     );
     res.json(rows);
@@ -47,7 +48,7 @@ router.get('/:id', async (req, res, next) => {
       `SELECT t.*, w.name AS workplace_name, w.workplace_no
        FROM terminals t
        JOIN workplaces w ON t.workplace_id = w.id
-       WHERE t.id = ?`,
+       WHERE t.id = ? AND t.deleted_at IS NULL`,
       [id]
     );
 
@@ -67,7 +68,7 @@ router.post('/workplaces/:workplaceId/terminals', async (req, res, next) => {
   try {
     const { workplaceId } = req.params;
 
-    const [wpCheck] = await conn.query('SELECT id FROM workplaces WHERE id = ?', [workplaceId]);
+    const [wpCheck] = await conn.query('SELECT id FROM workplaces WHERE id = ? AND deleted_at IS NULL', [workplaceId]);
     if (wpCheck.length === 0) {
       throw createError(404, 'İşyeri bulunamadı.');
     }
@@ -127,7 +128,7 @@ router.put('/:id', async (req, res, next) => {
   const conn = await pool.getConnection();
   try {
     const { id } = req.params;
-    const [existing] = await conn.query('SELECT * FROM terminals WHERE id = ?', [id]);
+    const [existing] = await conn.query('SELECT * FROM terminals WHERE id = ? AND deleted_at IS NULL', [id]);
     if (existing.length === 0) {
       throw createError(404, 'Terminal bulunamadı.');
     }
@@ -186,18 +187,18 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// DELETE /api/terminals/:id - Delete terminal
+// DELETE /api/terminals/:id - Soft delete terminal
 router.delete('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // SELECT before DELETE (MySQL doesn't support RETURNING)
-    const [rows] = await pool.query('SELECT * FROM terminals WHERE id = ?', [id]);
+    // SELECT before soft-delete (only non-deleted records)
+    const [rows] = await pool.query('SELECT * FROM terminals WHERE id = ? AND deleted_at IS NULL', [id]);
     if (rows.length === 0) {
       throw createError(404, 'Terminal bulunamadı.');
     }
 
-    await pool.query('DELETE FROM terminals WHERE id = ?', [id]);
+    await pool.query('UPDATE terminals SET deleted_at = NOW() WHERE id = ?', [id]);
 
     res.json({ message: 'Terminal başarıyla silindi.', terminal: rows[0] });
   } catch (err) {

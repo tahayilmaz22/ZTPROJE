@@ -17,10 +17,11 @@ router.get('/', async (req, res, next) => {
     const [customers] = await pool.query(
       `SELECT id, customer_no, customer_type, first_name, last_name, phone, email
        FROM customers
-       WHERE customer_no LIKE ?
+       WHERE deleted_at IS NULL
+         AND (customer_no LIKE ?
           OR first_name LIKE ?
           OR last_name LIKE ?
-          OR phone LIKE ?
+          OR phone LIKE ?)
        ORDER BY id DESC
        LIMIT 20`,
       [searchTerm, searchTerm, searchTerm, searchTerm]
@@ -35,9 +36,12 @@ router.get('/', async (req, res, next) => {
        FROM terminals t
        JOIN workplaces w ON t.workplace_id = w.id
        JOIN customers c ON w.customer_id = c.id
-       WHERE t.terminal_id LIKE ?
+       WHERE t.deleted_at IS NULL
+         AND w.deleted_at IS NULL
+         AND c.deleted_at IS NULL
+         AND (t.terminal_id LIKE ?
           OR t.serial_no LIKE ?
-          OR t.model_code LIKE ?
+          OR t.model_code LIKE ?)
        ORDER BY t.id DESC
        LIMIT 20`,
       [searchTerm, searchTerm, searchTerm]
@@ -49,8 +53,10 @@ router.get('/', async (req, res, next) => {
               w.customer_id, c.customer_no, c.first_name, c.last_name
        FROM workplaces w
        JOIN customers c ON w.customer_id = c.id
-       WHERE w.name LIKE ?
-          OR w.workplace_no LIKE ?
+       WHERE w.deleted_at IS NULL
+         AND c.deleted_at IS NULL
+         AND (w.name LIKE ?
+          OR w.workplace_no LIKE ?)
        ORDER BY w.id DESC
        LIMIT 10`,
       [searchTerm, searchTerm]

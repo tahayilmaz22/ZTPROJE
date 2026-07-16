@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS customers (
     phone VARCHAR(20),
     email VARCHAR(150),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL DEFAULT NULL
 );
 
 -- Individual customer details
@@ -51,6 +52,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     blocked_amount DECIMAL(18,2) DEFAULT 0,
     interest_rate DECIMAL(5,2) DEFAULT 0,
     iban VARCHAR(34),
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
 );
 
@@ -73,6 +75,7 @@ CREATE TABLE IF NOT EXISTS workplaces (
     workplace_type VARCHAR(20) DEFAULT 'normal' CHECK (workplace_type IN ('normal', 'virtual')),
     commission_rate DECIMAL(5,2) DEFAULT 0,
     block_day INT DEFAULT 0,
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
 );
 
@@ -90,6 +93,7 @@ CREATE TABLE IF NOT EXISTS terminals (
     service_company VARCHAR(200),
     serial_no VARCHAR(100),
     closure_reason VARCHAR(200),
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
     FOREIGN KEY (workplace_id) REFERENCES workplaces(id) ON DELETE CASCADE
 );
 
@@ -108,9 +112,13 @@ CREATE TABLE IF NOT EXISTS operation_logs (
 -- Indexes for performance
 CREATE INDEX idx_customers_customer_no ON customers(customer_no);
 CREATE INDEX idx_customers_type ON customers(customer_type);
+CREATE INDEX idx_customers_deleted_at ON customers(deleted_at);
 CREATE INDEX idx_accounts_customer_id ON accounts(customer_id);
+CREATE INDEX idx_accounts_deleted_at ON accounts(deleted_at);
 CREATE INDEX idx_workplaces_customer_id ON workplaces(customer_id);
+CREATE INDEX idx_workplaces_deleted_at ON workplaces(deleted_at);
 CREATE INDEX idx_terminals_workplace_id ON terminals(workplace_id);
 CREATE INDEX idx_terminals_serial_no ON terminals(serial_no);
+CREATE INDEX idx_terminals_deleted_at ON terminals(deleted_at);
 CREATE INDEX idx_operation_logs_entity ON operation_logs(entity_type, entity_id);
 CREATE INDEX idx_operation_logs_date ON operation_logs(changed_at);

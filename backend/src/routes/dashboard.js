@@ -5,34 +5,34 @@ const pool = require('../config/db');
 // GET /api/dashboard/stats - Dashboard statistics
 router.get('/stats', async (req, res, next) => {
   try {
-    // Total open terminal count
+    // Total open terminal count (non-deleted only)
     const [openTerminalsResult] = await pool.query(
-      'SELECT COUNT(*) AS count FROM terminals WHERE registration_status = 1'
+      'SELECT COUNT(*) AS count FROM terminals WHERE registration_status = 1 AND deleted_at IS NULL'
     );
 
-    // Total blocked amount across all accounts
+    // Total blocked amount across all non-deleted accounts
     const [blockedAmountResult] = await pool.query(
-      'SELECT COALESCE(SUM(blocked_amount), 0) AS total FROM accounts'
+      'SELECT COALESCE(SUM(blocked_amount), 0) AS total FROM accounts WHERE deleted_at IS NULL'
     );
 
-    // Customers added today
+    // Customers added today (non-deleted only)
     const [todayCustomersResult] = await pool.query(
-      'SELECT COUNT(*) AS count FROM customers WHERE DATE(registration_date) = CURDATE()'
+      'SELECT COUNT(*) AS count FROM customers WHERE DATE(registration_date) = CURDATE() AND deleted_at IS NULL'
     );
 
-    // Total customer count
+    // Total customer count (non-deleted)
     const [totalCustomersResult] = await pool.query(
-      'SELECT COUNT(*) AS count FROM customers'
+      'SELECT COUNT(*) AS count FROM customers WHERE deleted_at IS NULL'
     );
 
-    // Total terminal count
+    // Total terminal count (non-deleted)
     const [totalTerminalsResult] = await pool.query(
-      'SELECT COUNT(*) AS count FROM terminals'
+      'SELECT COUNT(*) AS count FROM terminals WHERE deleted_at IS NULL'
     );
 
-    // Total workplace count
+    // Total workplace count (non-deleted)
     const [totalWorkplacesResult] = await pool.query(
-      'SELECT COUNT(*) AS count FROM workplaces'
+      'SELECT COUNT(*) AS count FROM workplaces WHERE deleted_at IS NULL'
     );
 
     res.json({
