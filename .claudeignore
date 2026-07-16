@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+.git/
+*.log
+*.lock
+package-lock.json
+yarn.lock
+*.png
+*.jpg
+*.mp4
+.env
+coverage/
+.venv/
+__pycache__/
+*.pyc
