@@ -168,7 +168,7 @@ export default function CustomerForm() {
               <div className="form-row">
                 <div className="form-group">
                   <label>TC Kimlik No <span className="required">*</span></label>
-                  <input className="form-control" value={tcDisplay} onChange={handleTcChange} placeholder="___ ___ ___ __" maxLength={14} required />
+                  <input className="form-control" value={tcDisplay} onChange={handleTcChange} placeholder="___ ___ ___ __" maxLength={15} required />
                 </div>
                 <div className="form-group">
                   <label>Baba Adı</label>
