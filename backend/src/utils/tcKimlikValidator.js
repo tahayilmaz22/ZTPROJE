@@ -37,10 +37,7 @@ function validateTCKimlikNo(tcNo) {
   // (sum of odd-positioned digits × 7 − sum of even-positioned digits) mod 10 = digit 10
   const oddSum = digits[0] + digits[2] + digits[4] + digits[6] + digits[8];
   const evenSum = digits[1] + digits[3] + digits[5] + digits[7];
-  const tenthDigitCalc = ((oddSum * 7) - evenSum) % 10;
-
-  // Handle negative modulo in JS
-  const tenthDigit = tenthDigitCalc < 0 ? tenthDigitCalc + 10 : tenthDigitCalc;
+  const tenthDigit = ((oddSum * 7) - evenSum) % 10;
 
   if (tenthDigit !== digits[9]) {
     return { valid: false, message: 'Geçersiz TC Kimlik No: 10. hane kontrolü başarısız.' };
