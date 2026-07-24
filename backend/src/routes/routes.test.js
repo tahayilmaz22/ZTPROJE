@@ -8,7 +8,8 @@ jest.mock('../config/db', () => ({
 }));
 //mock tc validator bcs its tested seperately anyway
 jest.mock('../utils/validators', () => ({
-  validateCustomer: jest.fn().mockReturnValue([]), 
+  validateCustomer: jest.fn().mockReturnValue([]),
+  validateAccount: jest.fn().mockReturnValue([]),
 }));
 
 
@@ -25,10 +26,15 @@ function mockconnection(){
 
 const pool = require('../config/db');
 
+// Access the mocked validateAccount to control per test
+const { validateAccount } = require('../utils/validators');
+
 // 2. Import your routes
 const customerRouter = require('./customers');
 const searchRouter = require('./search');
 const dashboardRouter = require('./dashboard');
+const accountsRouter = require('./accounts');
+const { errorHandler } = require('../middleware/errorHandler');
 
 // 3. Create a test app
 const app = express();
@@ -36,6 +42,8 @@ app.use(express.json());
 app.use('/api/customers', customerRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/accounts', accountsRouter);
+app.use(errorHandler);
 
 // 4. Reset mocks between tests
 beforeEach(() => {
@@ -269,3 +277,180 @@ test('GET /api/dashboard/stats handles database error', async () => {
 
   expect(res.status).toBe(500);
 });
+
+// ── accounts.js tests ──────────────────────────────────────────────
+
+// GET /api/accounts/customers/:customerId/accounts
+test('GET /api/accounts/customers/:customerId/accounts returns account list', async () => {
+  pool.query.mockResolvedValue([[{ id: 1, customer_id: 5, account_name: 'Vadesiz TL' }]]);
+
+  const res = await request(app).get('/api/accounts/customers/5/accounts');
+
+  expect(res.status).toBe(200);
+  expect(res.body).toEqual([{ id: 1, customer_id: 5, account_name: 'Vadesiz TL' }]);
+});
+
+test('GET /api/accounts/customers/:customerId/accounts handles DB error', async () => {
+  pool.query.mockRejectedValue(new Error('DB down'));
+
+  const res = await request(app).get('/api/accounts/customers/5/accounts');
+
+  expect(res.status).toBe(500);
+});
+
+// GET /api/accounts/
+test('GET /api/accounts/ returns all accounts with customer info', async () => {
+  pool.query.mockResolvedValue([[
+    { id: 1, account_name: 'Vadesiz TL', customer_no: 'M-00001', first_name: 'Ali', last_name: 'Yılmaz' },
+  ]]);
+
+  const res = await request(app).get('/api/accounts/');
+
+  expect(res.status).toBe(200);
+  expect(res.body).toEqual([
+    { id: 1, account_name: 'Vadesiz TL', customer_no: 'M-00001', first_name: 'Ali', last_name: 'Yılmaz' },
+  ]);
+});
+
+test('GET /api/accounts/ handles DB error', async () => {
+  pool.query.mockRejectedValue(new Error('DB down'));
+
+  const res = await request(app).get('/api/accounts/');
+
+  expect(res.status).toBe(500);
+});
+
+// GET /api/accounts/:id
+test('GET /api/accounts/:id returns single account', async () => {
+  pool.query.mockResolvedValue([[{ id: 10, account_name: 'Vadesiz TL', status: 'open' }]]);
+
+  const res = await request(app).get('/api/accounts/10');
+
+  expect(res.status).toBe(200);
+  expect(res.body).toEqual({ id: 10, account_name: 'Vadesiz TL', status: 'open' });
+});
+
+test('GET /api/accounts/:id returns 404 when not found', async () => {
+  pool.query.mockResolvedValue([[]]);
+
+  const res = await request(app).get('/api/accounts/999');
+
+  expect(res.status).toBe(404);
+});
+
+// POST /api/accounts/customers/:customerId/accounts
+test('POST /api/accounts/customers/:customerId/accounts creates account', async () => {
+  // Customer exists check
+  pool.query.mockResolvedValueOnce([[{ id: 5 }]]);
+  // INSERT
+  pool.query.mockResolvedValueOnce([{ insertId: 20 }]);
+  // SELECT inserted row
+  pool.query.mockResolvedValueOnce([[{ id: 20, customer_id: 5, account_name: 'Vadesiz TL', status: 'open', currency_code: 'TRY' }]]);
+
+  const res = await request(app)
+    .post('/api/accounts/customers/5/accounts')
+    .send({
+      account_name: 'Vadesiz TL',
+      extension_no: '001',
+      status: 'open',
+      currency_code: 'TRY',
+      balance: 1000,
+      blocked_amount: 0,
+      interest_rate: 5,
+      iban: 'TR330006100519786457841326',
+    });
+
+  expect(res.status).toBe(201);
+  expect(res.body.account_name).toBe('Vadesiz TL');
+  expect(res.body.id).toBe(20);
+});
+
+test('POST /api/accounts/customers/:customerId/accounts returns 404 when customer not found', async () => {
+  pool.query.mockResolvedValueOnce([[]]); // customer check fails
+
+  const res = await request(app)
+    .post('/api/accounts/customers/999/accounts')
+    .send({ account_name: 'Test', currency_code: 'TRY' });
+
+  expect(res.status).toBe(404);
+});
+
+test('POST /api/accounts/customers/:customerId/accounts returns 400 when validation fails', async () => {
+  pool.query.mockResolvedValueOnce([[{ id: 5 }]]); // customer exists
+  validateAccount.mockReturnValueOnce(['Hesap adı zorunludur.']);
+
+  const res = await request(app)
+    .post('/api/accounts/customers/5/accounts')
+    .send({ account_name: '' });
+
+  expect(res.status).toBe(400);
+});
+
+// PUT /api/accounts/:id
+test('PUT /api/accounts/:id updates account', async () => {
+  // Existing check
+  pool.query.mockResolvedValueOnce([[{ id: 10, account_name: 'Old', status: 'open' }]]);
+  // UPDATE
+  pool.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+  // SELECT updated row
+  pool.query.mockResolvedValueOnce([[{ id: 10, account_name: 'Updated', status: 'closed' }]]);
+
+  const res = await request(app)
+    .put('/api/accounts/10')
+    .send({
+      account_name: 'Updated',
+      extension_no: '002',
+      status: 'closed',
+      currency_code: 'USD',
+      balance: 500,
+      blocked_amount: 100,
+      interest_rate: 3,
+      iban: 'TR330006100519786457841326',
+    });
+
+  expect(res.status).toBe(200);
+  expect(res.body.account_name).toBe('Updated');
+  expect(res.body.id).toBe(10);
+});
+
+test('PUT /api/accounts/:id returns 404 when account not found', async () => {
+  pool.query.mockResolvedValueOnce([[]]); // not found
+
+  const res = await request(app)
+    .put('/api/accounts/999')
+    .send({ account_name: 'Test', currency_code: 'TRY' });
+
+  expect(res.status).toBe(404);
+});
+
+test('PUT /api/accounts/:id returns 400 when validation fails', async () => {
+  pool.query.mockResolvedValueOnce([[{ id: 10, account_name: 'Old' }]]); // exists
+  validateAccount.mockReturnValueOnce(['Hesap adı zorunludur.']);
+
+  const res = await request(app)
+    .put('/api/accounts/10')
+    .send({ account_name: '' });
+
+  expect(res.status).toBe(400);
+});
+
+// DELETE /api/accounts/:id
+test('DELETE /api/accounts/:id soft-deletes account', async () => {
+  pool.query.mockResolvedValueOnce([[{ id: 15, account_name: 'ToDelete' }]]); // SELECT
+  pool.query.mockResolvedValueOnce([{ affectedRows: 1 }]); // UPDATE SET deleted_at
+
+  const res = await request(app).delete('/api/accounts/15');
+
+  expect(res.status).toBe(200);
+  expect(res.body.message).toBe('Hesap başarıyla silindi.');
+  expect(res.body.account.id).toBe(15);
+});
+
+test('DELETE /api/accounts/:id returns 404 when account not found', async () => {
+  pool.query.mockResolvedValueOnce([[]]); // not found
+
+  const res = await request(app).delete('/api/accounts/999');
+
+  expect(res.status).toBe(404);
+});
+
