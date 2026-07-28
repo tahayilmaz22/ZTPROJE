@@ -12,6 +12,20 @@ jest.mock('../utils/validators', () => ({
   validateAccount: jest.fn().mockReturnValue([]),
 }));
 
+jest.mock('exceljs', () => {
+  const mockSheet = {
+    columns: null,
+    addRows: jest.fn(),
+    getRow: jest.fn().mockReturnValue({ font: {}, fill: {} }),
+  };
+  return {
+    Workbook: jest.fn().mockImplementation(() => ({
+      addWorksheet: jest.fn().mockReturnValue(mockSheet),
+      xlsx: { write: jest.fn().mockResolvedValue() },
+    })),
+  };
+});
+
 
 //mock connection for post/put tests 
 function mockconnection(){
@@ -34,6 +48,9 @@ const customerRouter = require('./customers');
 const searchRouter = require('./search');
 const dashboardRouter = require('./dashboard');
 const accountsRouter = require('./accounts');
+const logsRouter = require('./logs');
+const exportRouter = require('./exportRoutes');
+const ExcelJS = require('exceljs');
 const { errorHandler } = require('../middleware/errorHandler');
 
 // 3. Create a test app
@@ -43,6 +60,8 @@ app.use('/api/customers', customerRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/accounts', accountsRouter);
+app.use('/api/logs', logsRouter);
+app.use('/api/export', exportRouter);
 app.use(errorHandler);
 
 // 4. Reset mocks between tests
@@ -452,5 +471,140 @@ test('DELETE /api/accounts/:id returns 404 when account not found', async () => 
   const res = await request(app).delete('/api/accounts/999');
 
   expect(res.status).toBe(404);
+});
+
+// ── logs.js tests ──────────────────────────────────────────────
+
+test('GET /api/logs returns logs and total count', async () => {
+  const mockLogs = [
+    { id: 1, entity_type: 'terminal', action: 'status_change', changed_at: '2026-01-01' },
+    { id: 2, entity_type: 'workplace', action: 'create', changed_at: '2026-01-02' },
+  ];
+  // First query: SELECT logs with LIMIT
+  pool.query.mockResolvedValueOnce([mockLogs]);
+  // Second query: SELECT COUNT(*)
+  pool.query.mockResolvedValueOnce([[{ total: 2 }]]);
+
+  const res = await request(app).get('/api/logs');
+
+  expect(res.status).toBe(200);
+  expect(res.body).toEqual({ logs: mockLogs, total: 2 });
+  // Default limit is 100
+  expect(pool.query).toHaveBeenCalledWith(
+    expect.stringContaining('LIMIT ?'),
+    [100]
+  );
+});
+
+test('GET /api/logs?entity_type= filters by entity type', async () => {
+  pool.query.mockResolvedValueOnce([[{ id: 1, entity_type: 'terminal' }]]);
+  pool.query.mockResolvedValueOnce([[{ total: 1 }]]);
+
+  const res = await request(app).get('/api/logs?entity_type=terminal');
+
+  expect(res.status).toBe(200);
+  expect(pool.query).toHaveBeenCalledWith(
+    expect.stringContaining('AND entity_type = ?'),
+    ['terminal', 100]
+  );
+});
+
+test('GET /api/logs?limit= uses the requested limit', async () => {
+  pool.query.mockResolvedValueOnce([[]]);
+  pool.query.mockResolvedValueOnce([[{ total: 0 }]]);
+
+  const res = await request(app).get('/api/logs?limit=50');
+
+  expect(res.status).toBe(200);
+  expect(pool.query).toHaveBeenCalledWith(
+    expect.stringContaining('LIMIT ?'),
+    [50]
+  );
+});
+
+test('GET /api/logs?limit= caps at max 500', async () => {
+  pool.query.mockResolvedValueOnce([[]]);
+  pool.query.mockResolvedValueOnce([[{ total: 0 }]]);
+
+  const res = await request(app).get('/api/logs?limit=1000');
+
+  expect(res.status).toBe(200);
+  expect(pool.query).toHaveBeenCalledWith(
+    expect.stringContaining('LIMIT ?'),
+    [500]
+  );
+});
+
+test('GET /api/logs?limit=&offset= supports pagination', async () => {
+  pool.query.mockResolvedValueOnce([[]]);
+  pool.query.mockResolvedValueOnce([[{ total: 50 }]]);
+
+  const res = await request(app).get('/api/logs?limit=25&offset=10');
+
+  expect(res.status).toBe(200);
+  expect(pool.query).toHaveBeenCalledWith(
+    expect.stringContaining('LIMIT ?'),
+    [25, 10]
+  );
+  expect(pool.query).toHaveBeenCalledWith(
+    expect.stringContaining('OFFSET ?'),
+    [25, 10]
+  );
+});
+
+test('GET /api/logs handles DB error', async () => {
+  pool.query.mockRejectedValue(new Error('DB down'));
+
+  const res = await request(app).get('/api/logs');
+
+  expect(res.status).toBe(500);
+});
+
+// ── exportRoutes.js tests ──────────────────────────────────────────────
+
+test('GET /api/export/customers returns Excel file with correct headers', async () => {
+  pool.query.mockResolvedValue([[
+    { customer_no: 'M-00001', first_name: 'Ali', last_name: 'Yılmaz' },
+  ]]);
+
+  const res = await request(app).get('/api/export/customers');
+
+  expect(res.status).toBe(200);
+  expect(res.headers['content-type']).toBe(
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  );
+  expect(res.headers['content-disposition']).toBe('attachment; filename=customers.xlsx');
+  expect(ExcelJS.Workbook).toHaveBeenCalled();
+});
+
+test('GET /api/export/customers handles DB error', async () => {
+  pool.query.mockRejectedValue(new Error('DB down'));
+
+  const res = await request(app).get('/api/export/customers');
+
+  expect(res.status).toBe(500);
+});
+
+test('GET /api/export/terminals returns Excel file with correct headers', async () => {
+  pool.query.mockResolvedValue([[
+    { terminal_id: 'T-000001', serial_no: 'SN-001', registration_status: 1 },
+  ]]);
+
+  const res = await request(app).get('/api/export/terminals');
+
+  expect(res.status).toBe(200);
+  expect(res.headers['content-type']).toBe(
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  );
+  expect(res.headers['content-disposition']).toBe('attachment; filename=terminals.xlsx');
+  expect(ExcelJS.Workbook).toHaveBeenCalled();
+});
+
+test('GET /api/export/terminals handles DB error', async () => {
+  pool.query.mockRejectedValue(new Error('DB down'));
+
+  const res = await request(app).get('/api/export/terminals');
+
+  expect(res.status).toBe(500);
 });
 
