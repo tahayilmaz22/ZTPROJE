@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<coverage generated="1785414858851" clover="3.2.0">
+  <project timestamp="1785414858851" name="All files">
+    <metrics statements="54" coveredstatements="15" conditionals="24" coveredconditionals="15" methods="32" coveredmethods="4" elements="110" coveredelements="34" complexity="0" loc="54" ncloc="54" packages="2" files="2" classes="2"/>
+    <package name="services">
+      <metrics statements="39" coveredstatements="0" conditionals="9" coveredconditionals="0" methods="28" coveredmethods="0"/>
+      <file name="api.js" path="C:\Users\ASUS\Desktop\stajproje\frontend\src\services\api.js">
+        <metrics statements="39" coveredstatements="0" conditionals="9" coveredconditionals="0" methods="28" coveredmethods="0"/>
+        <line num="1" count="0" type="stmt"/>
+        <line num="4" count="0" type="stmt"/>
+        <line num="9" count="0" type="stmt"/>
+        <line num="11" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="12" count="0" type="stmt"/>
+        <line num="13" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="16" count="0" type="stmt"/>
+        <line num="20" count="0" type="stmt"/>
+        <line num="21" count="0" type="stmt"/>
+        <line num="22" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="24" count="0" type="stmt"/>
+        <line num="25" count="0" type="stmt"/>
+        <line num="26" count="0" type="stmt"/>
+        <line num="27" count="0" type="stmt"/>
+        <line num="30" count="0" type="stmt"/>
+        <line num="31" count="0" type="stmt"/>
+        <line num="32" count="0" type="stmt"/>
+        <line num="33" count="0" type="stmt"/>
+        <line num="34" count="0" type="stmt"/>
+        <line num="35" count="0" type="stmt"/>
+        <line num="38" count="0" type="stmt"/>
+        <line num="39" count="0" type="stmt"/>
+        <line num="40" count="0" type="stmt"/>
+        <line num="41" count="0" type="stmt"/>
+        <line num="42" count="0" type="stmt"/>
+        <line num="43" count="0" type="stmt"/>
+        <line num="46" count="0" type="stmt"/>
+        <line num="47" count="0" type="stmt"/>
+        <line num="48" count="0" type="stmt"/>
+        <line num="49" count="0" type="stmt"/>
+        <line num="50" count="0" type="stmt"/>
+        <line num="51" count="0" type="stmt"/>
+        <line num="54" count="0" type="stmt"/>
+        <line num="57" count="0" type="stmt"/>
+        <line num="58" count="0" type="stmt"/>
+        <line num="59" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="63" count="0" type="stmt"/>
+        <line num="66" count="0" type="stmt"/>
+        <line num="67" count="0" type="stmt"/>
+      </file>
+    </package>
+    <package name="utils">
+      <metrics statements="15" coveredstatements="15" conditionals="15" coveredconditionals="15" methods="4" coveredmethods="4"/>
+      <file name="masks.js" path="C:\Users\ASUS\Desktop\stajproje\frontend\src\utils\masks.js">
+        <metrics statements="15" coveredstatements="15" conditionals="15" coveredconditionals="15" methods="4" coveredmethods="4"/>
+        <line num="5" count="10" type="stmt"/>
+        <line num="6" count="10" type="stmt"/>
+        <line num="7" count="10" type="stmt"/>
+        <line num="8" count="110" type="cond" truecount="5" falsecount="0"/>
+        <line num="9" count="110" type="cond" truecount="2" falsecount="0"/>
+        <line num="11" count="10" type="stmt"/>
+        <line num="15" count="5" type="stmt"/>
+        <line num="22" count="10" type="stmt"/>
+        <line num="23" count="10" type="stmt"/>
+        <line num="24" count="10" type="stmt"/>
+        <line num="25" count="100" type="cond" truecount="2" falsecount="0"/>
+        <line num="26" count="100" type="cond" truecount="4" falsecount="0"/>
+        <line num="27" count="100" type="cond" truecount="2" falsecount="0"/>
+        <line num="29" count="10" type="stmt"/>
+        <line num="33" count="5" type="stmt"/>
+      </file>
+    </package>
+  </project>
+</coverage>

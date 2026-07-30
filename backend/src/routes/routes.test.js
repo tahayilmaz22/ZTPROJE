@@ -10,6 +10,8 @@ jest.mock('../config/db', () => ({
 jest.mock('../utils/validators', () => ({
   validateCustomer: jest.fn().mockReturnValue([]),
   validateAccount: jest.fn().mockReturnValue([]),
+  validateWorkplace: jest.fn().mockReturnValue([]),
+  validateTerminal: jest.fn().mockReturnValue([]),
 }));
 
 jest.mock('exceljs', () => {
@@ -41,7 +43,7 @@ function mockconnection(){
 const pool = require('../config/db');
 
 // Access the mocked validateAccount to control per test
-const { validateAccount } = require('../utils/validators');
+const { validateAccount, validateWorkplace, validateTerminal } = require('../utils/validators');
 
 // 2. Import your routes
 const customerRouter = require('./customers');
@@ -50,6 +52,8 @@ const dashboardRouter = require('./dashboard');
 const accountsRouter = require('./accounts');
 const logsRouter = require('./logs');
 const exportRouter = require('./exportRoutes');
+const workplacesRouter = require('./workplaces');
+const terminalsRouter = require('./terminals');
 const ExcelJS = require('exceljs');
 const { errorHandler } = require('../middleware/errorHandler');
 
@@ -62,6 +66,8 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/accounts', accountsRouter);
 app.use('/api/logs', logsRouter);
 app.use('/api/export', exportRouter);
+app.use('/api/workplaces', workplacesRouter);
+app.use('/api/terminals', terminalsRouter);
 app.use(errorHandler);
 
 // 4. Reset mocks between tests
@@ -606,5 +612,479 @@ test('GET /api/export/terminals handles DB error', async () => {
   const res = await request(app).get('/api/export/terminals');
 
   expect(res.status).toBe(500);
+});
+
+// ── workplaces.js tests ──────────────────────────────────────────────
+
+// GET /api/workplaces/customers/:customerId/workplaces
+test('GET /api/workplaces/customers/:customerId/workplaces returns list', async () => {
+  pool.query.mockResolvedValue([[{ id: 1, customer_id: 5, name: 'Merkez Şube' }]]);
+
+  const res = await request(app).get('/api/workplaces/customers/5/workplaces');
+
+  expect(res.status).toBe(200);
+  expect(res.body).toEqual([{ id: 1, customer_id: 5, name: 'Merkez Şube' }]);
+});
+
+test('GET /api/workplaces/customers/:customerId/workplaces handles DB error', async () => {
+  pool.query.mockRejectedValue(new Error('DB down'));
+
+  const res = await request(app).get('/api/workplaces/customers/5/workplaces');
+
+  expect(res.status).toBe(500);
+});
+
+// GET /api/workplaces/
+test('GET /api/workplaces/ returns all workplaces with customer info', async () => {
+  pool.query.mockResolvedValue([[
+    { id: 1, name: 'Merkez Şube', customer_no: 'M-00001', first_name: 'Ali', last_name: 'Yılmaz' },
+  ]]);
+
+  const res = await request(app).get('/api/workplaces/');
+
+  expect(res.status).toBe(200);
+  expect(res.body).toEqual([
+    { id: 1, name: 'Merkez Şube', customer_no: 'M-00001', first_name: 'Ali', last_name: 'Yılmaz' },
+  ]);
+});
+
+test('GET /api/workplaces/ handles DB error', async () => {
+  pool.query.mockRejectedValue(new Error('DB down'));
+
+  const res = await request(app).get('/api/workplaces/');
+
+  expect(res.status).toBe(500);
+});
+
+// GET /api/workplaces/:id
+test('GET /api/workplaces/:id returns single workplace', async () => {
+  pool.query.mockResolvedValue([[
+    { id: 10, name: 'Merkez Şube', customer_no: 'M-00001', first_name: 'Ali', last_name: 'Yılmaz' },
+  ]]);
+
+  const res = await request(app).get('/api/workplaces/10');
+
+  expect(res.status).toBe(200);
+  expect(res.body).toEqual({ id: 10, name: 'Merkez Şube', customer_no: 'M-00001', first_name: 'Ali', last_name: 'Yılmaz' });
+});
+
+test('GET /api/workplaces/:id returns 404 when not found', async () => {
+  pool.query.mockResolvedValue([[]]);
+
+  const res = await request(app).get('/api/workplaces/999');
+
+  expect(res.status).toBe(404);
+});
+
+// POST /api/workplaces/customers/:customerId/workplaces
+test('POST /api/workplaces/customers/:customerId/workplaces creates workplace', async () => {
+  const conn = mockconnection();
+
+  // 1. Customer exists check
+  conn.query.mockResolvedValueOnce([[{ id: 5 }]]);
+  // 2. workplace_no generation
+  conn.query.mockResolvedValueOnce([[{ new_no: 'I-000042' }]]);
+  // 3. INSERT workplace
+  conn.query.mockResolvedValueOnce([{ insertId: 20 }]);
+  // 4. Log creation
+  conn.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+  // 5. SELECT inserted row
+  conn.query.mockResolvedValueOnce([[{ id: 20, customer_id: 5, workplace_no: 'I-000042', name: 'Merkez Şube', status: 'active' }]]);
+
+  const res = await request(app)
+    .post('/api/workplaces/customers/5/workplaces')
+    .send({
+      name: 'Merkez Şube',
+      status: 'active',
+      manager: 'Mehmet Demir',
+      workplace_type: 'normal',
+    });
+
+  expect(res.status).toBe(201);
+  expect(res.body.name).toBe('Merkez Şube');
+  expect(res.body.id).toBe(20);
+  expect(res.body.workplace_no).toBe('I-000042');
+  expect(conn.release).toHaveBeenCalled();
+});
+
+test('POST /api/workplaces/customers/:customerId/workplaces returns 404 when customer not found', async () => {
+  const conn = mockconnection();
+  conn.query.mockResolvedValueOnce([[]]); // customer check fails
+
+  const res = await request(app)
+    .post('/api/workplaces/customers/999/workplaces')
+    .send({ name: 'Test', manager: 'X', workplace_type: 'normal' });
+
+  expect(res.status).toBe(404);
+  expect(conn.release).toHaveBeenCalled();
+});
+
+test('POST /api/workplaces/customers/:customerId/workplaces returns 400 when validation fails', async () => {
+  const conn = mockconnection();
+  conn.query.mockResolvedValueOnce([[{ id: 5 }]]); // customer exists
+  validateWorkplace.mockReturnValueOnce(['İşyeri adı zorunludur.']);
+
+  const res = await request(app)
+    .post('/api/workplaces/customers/5/workplaces')
+    .send({ name: '' });
+
+  expect(res.status).toBe(400);
+  expect(conn.release).toHaveBeenCalled();
+});
+
+// PUT /api/workplaces/:id
+test('PUT /api/workplaces/:id updates workplace with status change log', async () => {
+  const conn = mockconnection();
+
+  // 1. Existing check — old status is 'active'
+  conn.query.mockResolvedValueOnce([[{ id: 10, name: 'Old', status: 'active' }]]);
+  // 2. UPDATE
+  conn.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+  // 3. Log status change (active → inactive)
+  conn.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+  // 4. SELECT updated row
+  conn.query.mockResolvedValueOnce([[{ id: 10, name: 'Updated', status: 'inactive' }]]);
+
+  const res = await request(app)
+    .put('/api/workplaces/10')
+    .send({
+      name: 'Updated',
+      status: 'inactive',
+      manager: 'Mehmet Demir',
+      workplace_type: 'normal',
+    });
+
+  expect(res.status).toBe(200);
+  expect(res.body.name).toBe('Updated');
+  expect(res.body.id).toBe(10);
+  expect(conn.release).toHaveBeenCalled();
+  // Should have called 4 queries (including the status-change log)
+  expect(conn.query).toHaveBeenCalledTimes(4);
+});
+
+test('PUT /api/workplaces/:id does not log when status unchanged', async () => {
+  const conn = mockconnection();
+
+  // 1. Existing check
+  conn.query.mockResolvedValueOnce([[{ id: 10, name: 'Old', status: 'active' }]]);
+  // 2. UPDATE
+  conn.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+  // 3. SELECT updated row (no status-change log since status is same)
+  conn.query.mockResolvedValueOnce([[{ id: 10, name: 'Updated', status: 'active' }]]);
+
+  const res = await request(app)
+    .put('/api/workplaces/10')
+    .send({
+      name: 'Updated',
+      status: 'active',
+      manager: 'Mehmet Demir',
+      workplace_type: 'normal',
+    });
+
+  expect(res.status).toBe(200);
+  // Only 3 queries — no status-change log
+  expect(conn.query).toHaveBeenCalledTimes(3);
+});
+
+test('PUT /api/workplaces/:id returns 404 when not found', async () => {
+  const conn = mockconnection();
+  conn.query.mockResolvedValueOnce([[]]); // not found
+
+  const res = await request(app)
+    .put('/api/workplaces/999')
+    .send({ name: 'Test', manager: 'X', workplace_type: 'normal' });
+
+  expect(res.status).toBe(404);
+  expect(conn.release).toHaveBeenCalled();
+});
+
+test('PUT /api/workplaces/:id returns 400 when validation fails', async () => {
+  const conn = mockconnection();
+  conn.query.mockResolvedValueOnce([[{ id: 10, name: 'Old' }]]); // exists
+  validateWorkplace.mockReturnValueOnce(['İşyeri adı zorunludur.']);
+
+  const res = await request(app)
+    .put('/api/workplaces/10')
+    .send({ name: '' });
+
+  expect(res.status).toBe(400);
+  expect(conn.release).toHaveBeenCalled();
+});
+
+// DELETE /api/workplaces/:id
+test('DELETE /api/workplaces/:id soft-deletes workplace', async () => {
+  pool.query.mockResolvedValueOnce([[{ id: 15, name: 'ToDelete' }]]); // SELECT
+  pool.query.mockResolvedValueOnce([{ affectedRows: 1 }]); // UPDATE SET deleted_at
+
+  const res = await request(app).delete('/api/workplaces/15');
+
+  expect(res.status).toBe(200);
+  expect(res.body.message).toBe('İşyeri başarıyla silindi.');
+  expect(res.body.workplace.id).toBe(15);
+});
+
+test('DELETE /api/workplaces/:id returns 404 when not found', async () => {
+  pool.query.mockResolvedValueOnce([[]]); // not found
+
+  const res = await request(app).delete('/api/workplaces/999');
+
+  expect(res.status).toBe(404);
+});
+
+// ── terminals.js tests ──────────────────────────────────────────────
+
+// GET /api/terminals/workplaces/:workplaceId/terminals
+test('GET /api/terminals/workplaces/:workplaceId/terminals returns list', async () => {
+  pool.query.mockResolvedValue([[
+    { id: 1, workplace_id: 5, terminal_id: 'T-000001', workplace_name: 'Merkez Şube' },
+  ]]);
+
+  const res = await request(app).get('/api/terminals/workplaces/5/terminals');
+
+  expect(res.status).toBe(200);
+  expect(res.body).toEqual([
+    { id: 1, workplace_id: 5, terminal_id: 'T-000001', workplace_name: 'Merkez Şube' },
+  ]);
+});
+
+test('GET /api/terminals/workplaces/:workplaceId/terminals handles DB error', async () => {
+  pool.query.mockRejectedValue(new Error('DB down'));
+
+  const res = await request(app).get('/api/terminals/workplaces/5/terminals');
+
+  expect(res.status).toBe(500);
+});
+
+// GET /api/terminals/
+test('GET /api/terminals/ returns all terminals with joins', async () => {
+  pool.query.mockResolvedValue([[
+    {
+      id: 1, terminal_id: 'T-000001', workplace_name: 'Merkez Şube',
+      workplace_no: 'I-000042', customer_no: 'M-00001', first_name: 'Ali', last_name: 'Yılmaz',
+    },
+  ]]);
+
+  const res = await request(app).get('/api/terminals/');
+
+  expect(res.status).toBe(200);
+  expect(res.body).toEqual([
+    {
+      id: 1, terminal_id: 'T-000001', workplace_name: 'Merkez Şube',
+      workplace_no: 'I-000042', customer_no: 'M-00001', first_name: 'Ali', last_name: 'Yılmaz',
+    },
+  ]);
+});
+
+test('GET /api/terminals/ handles DB error', async () => {
+  pool.query.mockRejectedValue(new Error('DB down'));
+
+  const res = await request(app).get('/api/terminals/');
+
+  expect(res.status).toBe(500);
+});
+
+// GET /api/terminals/:id
+test('GET /api/terminals/:id returns single terminal', async () => {
+  pool.query.mockResolvedValue([[
+    { id: 10, terminal_id: 'T-000010', workplace_name: 'Merkez Şube', workplace_no: 'I-000042' },
+  ]]);
+
+  const res = await request(app).get('/api/terminals/10');
+
+  expect(res.status).toBe(200);
+  expect(res.body).toEqual({ id: 10, terminal_id: 'T-000010', workplace_name: 'Merkez Şube', workplace_no: 'I-000042' });
+});
+
+test('GET /api/terminals/:id returns 404 when not found', async () => {
+  pool.query.mockResolvedValue([[]]);
+
+  const res = await request(app).get('/api/terminals/999');
+
+  expect(res.status).toBe(404);
+});
+
+// POST /api/terminals/workplaces/:workplaceId/terminals
+test('POST /api/terminals/workplaces/:workplaceId/terminals creates terminal', async () => {
+  const conn = mockconnection();
+
+  // 1. Workplace exists check
+  conn.query.mockResolvedValueOnce([[{ id: 5 }]]);
+  // 2. terminal_id generation
+  conn.query.mockResolvedValueOnce([[{ new_id: 'T-000042' }]]);
+  // 3. INSERT terminal
+  conn.query.mockResolvedValueOnce([{ insertId: 30 }]);
+  // 4. Log creation
+  conn.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+  // 5. SELECT inserted row with JOIN
+  conn.query.mockResolvedValueOnce([[
+    { id: 30, workplace_id: 5, terminal_id: 'T-000042', serial_no: 'SN-001', workplace_name: 'Merkez Şube', workplace_no: 'I-000042' },
+  ]]);
+
+  const res = await request(app)
+    .post('/api/terminals/workplaces/5/terminals')
+    .send({
+      serial_no: 'SN-001',
+      model_code: 'M1000',
+      registration_status: 1,
+    });
+
+  expect(res.status).toBe(201);
+  expect(res.body.terminal_id).toBe('T-000042');
+  expect(res.body.id).toBe(30);
+  expect(conn.release).toHaveBeenCalled();
+});
+
+test('POST /api/terminals/workplaces/:workplaceId/terminals returns 404 when workplace not found', async () => {
+  const conn = mockconnection();
+  conn.query.mockResolvedValueOnce([[]]); // workplace check fails
+
+  const res = await request(app)
+    .post('/api/terminals/workplaces/999/terminals')
+    .send({ serial_no: 'SN-001', model_code: 'M1000', registration_status: 1 });
+
+  expect(res.status).toBe(404);
+  expect(conn.release).toHaveBeenCalled();
+});
+
+test('POST /api/terminals/workplaces/:workplaceId/terminals returns 400 when validation fails', async () => {
+  const conn = mockconnection();
+  conn.query.mockResolvedValueOnce([[{ id: 5 }]]); // workplace exists
+  validateTerminal.mockReturnValueOnce(['Seri no zorunludur.']);
+
+  const res = await request(app)
+    .post('/api/terminals/workplaces/5/terminals')
+    .send({ serial_no: '' });
+
+  expect(res.status).toBe(400);
+  expect(conn.release).toHaveBeenCalled();
+});
+
+// PUT /api/terminals/:id
+test('PUT /api/terminals/:id updates terminal with status change log', async () => {
+  const conn = mockconnection();
+
+  // 1. Existing check — old registration_status is 1 (Açık)
+  conn.query.mockResolvedValueOnce([[{ id: 10, registration_status: 1 }]]);
+  // 2. UPDATE
+  conn.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+  // 3. Log status change (Açık → Kapalı)
+  conn.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+  // 4. SELECT updated row with JOIN
+  conn.query.mockResolvedValueOnce([[
+    { id: 10, terminal_id: 'T-000010', registration_status: 0, workplace_name: 'Merkez Şube', workplace_no: 'I-000042' },
+  ]]);
+
+  const res = await request(app)
+    .put('/api/terminals/10')
+    .send({
+      serial_no: 'SN-002',
+      model_code: 'M2000',
+      registration_status: 0,
+      closure_reason: 'Cihaz arızalı',
+    });
+
+  expect(res.status).toBe(200);
+  expect(res.body.registration_status).toBe(0);
+  expect(res.body.id).toBe(10);
+  expect(conn.release).toHaveBeenCalled();
+  expect(conn.query).toHaveBeenCalledTimes(4);
+});
+
+test('PUT /api/terminals/:id does not log when status unchanged', async () => {
+  const conn = mockconnection();
+
+  // 1. Existing check
+  conn.query.mockResolvedValueOnce([[{ id: 10, registration_status: 1 }]]);
+  // 2. UPDATE
+  conn.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+  // 3. SELECT updated row (no status-change log)
+  conn.query.mockResolvedValueOnce([[
+    { id: 10, terminal_id: 'T-000010', registration_status: 1, workplace_name: 'Merkez Şube' },
+  ]]);
+
+  const res = await request(app)
+    .put('/api/terminals/10')
+    .send({
+      serial_no: 'SN-002',
+      model_code: 'M2000',
+      registration_status: 1,
+    });
+
+  expect(res.status).toBe(200);
+  expect(conn.query).toHaveBeenCalledTimes(3);
+});
+
+test('PUT /api/terminals/:id sets closure_reason to null when status is not 0', async () => {
+  const conn = mockconnection();
+
+  // 1. Existing check
+  conn.query.mockResolvedValueOnce([[{ id: 10, registration_status: 0 }]]);
+  // 2. UPDATE — closure_reason should be null since status !== 0
+  conn.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+  // 3. Log status change
+  conn.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+  // 4. SELECT updated
+  conn.query.mockResolvedValueOnce([[
+    { id: 10, terminal_id: 'T-000010', registration_status: 1, workplace_name: 'Merkez Şube' },
+  ]]);
+
+  const res = await request(app)
+    .put('/api/terminals/10')
+    .send({
+      serial_no: 'SN-003',
+      model_code: 'M3000',
+      registration_status: 1,
+      closure_reason: 'should be nulled',
+    });
+
+  expect(res.status).toBe(200);
+  // Verify closure_reason was set to null in the UPDATE (not the closure_reason string)
+  const updateCall = conn.query.mock.calls.find(call => call[0].includes('UPDATE terminals SET'));
+  expect(updateCall[1]).toContain(null); // closure_reason is null
+});
+
+test('PUT /api/terminals/:id returns 404 when not found', async () => {
+  const conn = mockconnection();
+  conn.query.mockResolvedValueOnce([[]]); // not found
+
+  const res = await request(app)
+    .put('/api/terminals/999')
+    .send({ serial_no: 'SN', model_code: 'M1000', registration_status: 1 });
+
+  expect(res.status).toBe(404);
+  expect(conn.release).toHaveBeenCalled();
+});
+
+test('PUT /api/terminals/:id returns 400 when validation fails', async () => {
+  const conn = mockconnection();
+  conn.query.mockResolvedValueOnce([[{ id: 10, registration_status: 1 }]]); // exists
+  validateTerminal.mockReturnValueOnce(['Seri no zorunludur.']);
+
+  const res = await request(app)
+    .put('/api/terminals/10')
+    .send({ serial_no: '' });
+
+  expect(res.status).toBe(400);
+  expect(conn.release).toHaveBeenCalled();
+});
+
+// DELETE /api/terminals/:id
+test('DELETE /api/terminals/:id soft-deletes terminal', async () => {
+  pool.query.mockResolvedValueOnce([[{ id: 15, terminal_id: 'T-000015' }]]); // SELECT
+  pool.query.mockResolvedValueOnce([{ affectedRows: 1 }]); // UPDATE SET deleted_at
+
+  const res = await request(app).delete('/api/terminals/15');
+
+  expect(res.status).toBe(200);
+  expect(res.body.message).toBe('Terminal başarıyla silindi.');
+  expect(res.body.terminal.id).toBe(15);
+});
+
+test('DELETE /api/terminals/:id returns 404 when not found', async () => {
+  pool.query.mockResolvedValueOnce([[]]); // not found
+
+  const res = await request(app).delete('/api/terminals/999');
+
+  expect(res.status).toBe(404);
 });
 

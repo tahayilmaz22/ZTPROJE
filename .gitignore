@@ -56,3 +56,6 @@ Desktop.ini
 *.temp
 .cache/
 *.md
+
+#pointless
+ztprojeSpecifications.txt
